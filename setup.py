@@ -1,8 +1,21 @@
 # from wspBot import bot
 #import json
+import inquirer
 import os, platform
 
 PATH_OF_EXE = f"{os.getcwd()}\\bot.exe"
+
+def make_question(message:str, choices:list) -> str:
+    questions = [
+        inquirer.List(
+            "answer",
+            message,
+            choices
+        )
+    ]
+
+    answers = inquirer.prompt(questions)
+    return answers['answer']
 
 def clear_display():
     current_system = platform.system()
@@ -12,21 +25,20 @@ def clear_display():
     if current_system == "Linux":
         os.system("clear")
 
-def verify_day(day) -> tuple:
+def get_day_english(day:str) -> str:
     """
-    Return True if the given day is correct and the day in English as well
+    Return the day in English
     """
 
     days = {
-        "lunes": "monday", "martes": "tuesday",
-        "miércoles": "wednesday", "jueves": "thursday",
-        "viernes": "friday", "sábado": "saturday", "domingo": "sunday"
+        "Lunes": "Monday", "Martes": "Tuesday",
+        "Miércoles": "Wednesday", "Jueves": "Thursday",
+        "Viernes": "Friday", "Sábado": "Saturday", "Domingo": "Sunday"
     }
 
     for keys, values in days.items():
-        if keys == day: return True, values
-    
-    return False, ''
+        if keys == day:
+            return values
 
 def verify_hours(hours) -> bool:
     status = True
@@ -61,29 +73,40 @@ def verify_hours(hours) -> bool:
 def get_command(frequency:str, times:list) -> str:
     commands = []
     task = []
+    counter = 0
 
 
     if frequency == 'Daily':
-        for hour in times[0]:
+        while counter < len(times[0]):
+            hour = times[0][counter]
+
             action = f'$action = New-ScheduledTaskAction -Execute "{PATH_OF_EXE}"'
             trigger = f'$trigger = New-ScheduledTaskTrigger -Daily -At {hour}'
-            register = f"Register-ScheduledTask wspbotDaily -Action $action -Trigger $trigger"
+            register = f"Register-ScheduledTask wspbotDaily_{counter} -Action $action -Trigger $trigger"
 
             task.append(action)
             task.append(trigger)
             task.append(register)
             commands.append(task)
+            task = []
+
+            counter+=1
+
     elif frequency == 'Weekly':
-        for hour in times[1]:
+        while counter < len(times[1]):
+            hour = times[1][counter]
+
             action = f'$action = New-ScheduledTaskAction -Execute "{PATH_OF_EXE}"'
             trigger = f"$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek {times[0]} -At {hour}"
-            register = "Register-ScheduledTask wspbotWeek -Action $action -Trigger $trigger"
+            register = f"Register-ScheduledTask wspbotWeek_{counter} -Action $action -Trigger $trigger"
 
             task.append(action)
             task.append(trigger)
             task.append(register)
             commands.append(task)
+            task = []
 
+            counter+=1
     
     return commands
 
@@ -106,39 +129,28 @@ def get_hours() -> list:
     
     return hours
 
-def setup_frequency(recursive=False):
+def setup_frequency():
     data = {}
+    options = ["Diariamente", "Semanalmente", "Cancelar configuración y salir"]
 
-    if not recursive:
-        clear_display()
-        print("Ingrese las configuraciones iniciales para utilizar el programa\n")
-        print("1) Escoja la frecuencia de ejecución\n")
-    else:
-        print("\nIngrese una opción válida")
+    clear_display()
+    print("Ingrese las configuraciones iniciales para utilizar el programa\n")
+    frequency = make_question("Escoja la frecuencia de ejecución", options)
 
-    print("[a] -> Diaramente")
-    print("[b] -> Semanalmente")
-    print("[c] -> Cancelar configuración y salir\n")
-
-    frequency = input("[a/b/c] > ")
-
-    if frequency.lower().strip() == 'a':
+    if frequency == "Diariamente":
         hours = get_hours()
         command = get_command('Daily', [hours])
 
         data['frequency'] = 'Daily'
         data['time'] = hours
 
-    elif frequency.lower().strip() == 'b':
-        print("Ingrese el día de ejecución")
-        day = input("> ").strip().lower()
+    elif frequency == "Semanalmente":
+        day = make_question(
+            "Seleccione el día de ejecución",
+            ["Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo"]
+        )
 
-        status_day, day_english = verify_day(day)
-        while not status_day:
-            print("\nIngrese un día correcto (no olvide los acentos)")
-
-            day = input("> ").strip().lower()
-            status_day, day_english = verify_day(day)
+        day_english = get_day_english(day)
         
         hours = get_hours()
         command = get_command('Weekly', [day_english, hours])
@@ -146,37 +158,109 @@ def setup_frequency(recursive=False):
         data['frequency'] = 'Weekly'
         data['time'] = {day_english: hours}
 
-    elif frequency.lower().strip() == 'c':
+    elif frequency[0] == 'C':
         exit()
     else:
-        setup_frequency(True)
+        setup_frequency()
 
-    
+    data['tasks'] = len(hours) #Amount of tasks
     return command
+
+def verify_path(path:str) -> tuple:
+    if path.lower().strip() == 'x': return True, ''
+    if path.lower().strip() == 'd': return True, ''
+
+    status = True
+    message = ''
+
+    if '\\' in path:
+        status = False
+        message = "No ingrese backslashes ['\\']"
+    if path[-4:] != '.txt':
+        status = False
+        aux_message = "Debe ingresar el archivo .txt al final de la ruta"
+
+        if not message:
+            message = aux_message
+        else:
+            message = f"{message} y {aux_message.lower()}"
+
+    return status, message
+
+def show_paths(paths:list) -> list:
+    print("")
+
+    questions = [
+        inquirer.Checkbox(
+            name="check",
+            message="¿Qué rutas desea borrar? (Espacio para seleccionar) [Enter para enviar]",
+            choices=paths
+        )
+    ]
+
+    answers = inquirer.prompt(questions)
+    answers = answers.values()
+
+    for _ in answers:
+        for answer in _:
+            paths.remove(answer) #This doesn't remove the path in the list
+
+    print(f"Resultado: {paths}")
+    return paths
 
 def setup_paths() -> None:
     clear_display()
     print("Para los mensajes se necesita un archivo txt por cada mensaje que se quiera enviar")
     print("""
-        Si los mensajes quieren ser acompañados por una imagen
-        debe ingresar la ruta absoluta de la imagen dentro del archivo de texto
-        Al inicio (Y SOLO AL INICIO) del archivo de texto se debe incluir lo siguiente:\n
-        $PATH='la\\ruta\\aqui'
+    Si los mensajes quieren ser acompañados por una imagen
+    debe ingresar la ruta absoluta de la imagen dentro del archivo de texto
+    Al inicio (Y SOLO AL INICIO) del archivo de texto se debe incluir lo siguiente:\n
+    $PATH='C:/la/ruta/aqui'
     """)
 
-    print("2) Ingrese las rutas absolutas de los mensajes [C:/Users/YourUser/Desktop/resources/msg.txt]")
+    print("Ingrese las rutas absolutas de los mensajes [C:/Users/YourUser/Desktop/resources/msg.txt]")
     print("- Escriba 'x' para terminar el listado")
+    print("- Escriba 'd' si desea eliminar una ruta mal ingresada")
     print("- No ingrese las rutas entre comillas")
     print("- NO INGRESE LAS RUTAS CON BACKSLASHES '\\' INGRESE LAS RUTAS CON SLASHES '/'")
+    print("- Si ingresa una ruta que no existe, el mensaje simplemente no será enviado")
 
     paths = []
     while True:
         single_path = input("> ")
-        if single_path.lower().strip() == 'x': break
+        status_path, err_message = verify_path(single_path)
 
-        #TODO: verify the path before append
+        while not status_path:
+            print(err_message)
+            single_path = input("> ")
+            status_path, err_message = verify_path(single_path)
+        
+        if single_path.lower().strip() == 'x': break
+        elif single_path.lower().strip() == 'd' and len(paths) > 0:
+            paths = show_paths(paths)
+            continue
 
         paths.append(single_path)
+    
+    if len(paths) == 0:
+        response = make_question("No se ingresó ninguna ruta,¿Desea cancelar la configuración?", choices=['s', 'n'])
+
+        if response == 's': exit()
+
+        elif response == 'n':
+            confirm = make_question("\n¿Ingresó alguna ruta equivocada que quiera borrar?", choices=['s', 'n'])
+
+            if confirm == 's': paths = show_paths(paths)
+            else: setup_paths()
+
+        else:
+            setup_paths()
+    
+    print(paths)
+        
+
+#setup_frequency()
+#setup_paths()
 
 
 
