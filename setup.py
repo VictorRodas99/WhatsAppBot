@@ -187,26 +187,40 @@ def verify_path(path:str) -> tuple:
 
     return status, message
 
-def show_paths(paths:list) -> list:
+def show_paths(paths:list, err:str='') -> list:
     print("")
 
-    questions = [
-        inquirer.Checkbox(
-            name="check",
-            message="¿Qué rutas desea borrar? (Espacio para seleccionar) [Enter para enviar]",
-            choices=paths
-        )
-    ]
+    if err != '':
+        questions = [
+            inquirer.Checkbox(
+                name="check",
+                message=err,
+                choices=paths
+            )
+        ]
+    else:
+        questions = [
+            inquirer.Checkbox(
+                name="check",
+                message="¿Qué rutas desea borrar? (Espacio para seleccionar) [Enter para enviar]",
+                choices=paths
+            )
+        ]
 
     answers = inquirer.prompt(questions)
     answers = answers.values()
 
+    exists_answer = False
     for _ in answers:
         for answer in _:
+            exists_answer = True
             paths.remove(answer) #This doesn't remove the path in the list
 
-    print(f"Resultado: {paths}")
-    return paths
+    if not exists_answer:
+        return(show_paths(paths, err="ERROR: no ha seleccionado [Aprete espacio]"))
+    else:
+        print(f"Resultado: {paths}")
+        return paths
 
 def setup_paths() -> None:
     clear_display()
