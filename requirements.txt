@@ -4,3 +4,4 @@ webdriver-manager==3.8.3
 alright
 Selenium==4.2.0
 emoji
+inquirer
