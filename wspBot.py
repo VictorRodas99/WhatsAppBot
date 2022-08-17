@@ -7,7 +7,7 @@ import requests
 MESSENGER = WhatsApp()
 
 def write_in_log(names:list) -> None:
-    with open('log.txt', 'r') as f:
+    with open('log.txt', 'w') as f:
         now = datetime.now()
         f.write(f"[LOG DATE] -> ({now.day}/{now.month}/{now.year}) [{now.hour}:{now.minute}]\n")
         f.write("Hay algún link o algunos links que ya no funcionan\n")
