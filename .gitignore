@@ -8,6 +8,7 @@ recursos/
 testing/
 
 #Other files
+config.json
 activate.ps1
 
 # C extensions
