@@ -108,9 +108,9 @@ def get_command(frequency:str, times:list) -> str:
         while counter < len(times[0]):
             hour = times[0][counter]
 
-            action = f'$action = New-ScheduledTaskAction -Execute "{PATH_OF_EXE}"'
-            trigger = f'$trigger = New-ScheduledTaskTrigger -Daily -At {hour}'
-            register = f"Register-ScheduledTask wspbotDaily_{counter} -Action $action -Trigger $trigger"
+            action = f'$action = New-ScheduledTaskAction -Execute "{PATH_OF_EXE}";'
+            trigger = f'$trigger = New-ScheduledTaskTrigger -Daily -At {hour};'
+            register = f"Register-ScheduledTask wspbotDaily_{counter} -Action $action -Trigger $trigger;"
 
             task.append(action)
             task.append(trigger)
@@ -124,9 +124,9 @@ def get_command(frequency:str, times:list) -> str:
         while counter < len(times[1]):
             hour = times[1][counter]
 
-            action = f'$action = New-ScheduledTaskAction -Execute "{PATH_OF_EXE}"'
-            trigger = f"$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek {times[0]} -At {hour}"
-            register = f"Register-ScheduledTask wspbotWeek_{counter} -Action $action -Trigger $trigger"
+            action = f'$action = New-ScheduledTaskAction -Execute "{PATH_OF_EXE}";'
+            trigger = f"$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek {times[0]} -At {hour};"
+            register = f"Register-ScheduledTask wspbotWeek_{counter} -Action $action -Trigger $trigger;"
 
             task.append(action)
             task.append(trigger)
@@ -276,6 +276,41 @@ def get_link_or_path_from_user(message_delete:str, mode:str) -> list:
     
     return data
 
+def exec_powershell() -> bool:
+    """
+    Returns True if the script ends successfully, otherwise returns False
+    """
+
+    status = True
+
+    with open("./setTasks.ps1", 'r') as script:
+        text = script.read()
+    
+    print("\nCurrent script: ")
+    print(text)
+
+    return status
+
+def write_script(commands:list) -> bool:
+    status = True
+    for command in commands:
+        with open("setTasks.ps1", 'w') as script:
+            for section in command:
+                script.write(f"{section}\n")
+
+        control = exec_powershell() 
+        if not control: status = False #if the script doesn't end successfully returns False
+
+    return status
+
+def check_config() -> bool:
+    exists = True
+    files = os.listdir()
+
+    if 'config.json' not in files:
+        exists = False
+
+    return exists
 
 #Main functions
 def setup_frequency() -> tuple:
@@ -384,6 +419,30 @@ def setup_links() -> list:
     write_json({"links": links})
     return links
 
-#setup_links()
-#setup_frequency()
-#setup_paths()
+def main_setup() -> None:
+    data = {}
+
+    frequency_data, commands = setup_frequency()
+    message_paths = setup_paths()
+    group_links = setup_links()
+    
+    data = frequency_data
+    data['messages'] = message_paths
+    data['group_links'] = group_links
+
+    write_json(data)
+    write_script(commands)
+
+#TODO: check for nonexistent paths
+
+config_exists = check_config()
+if config_exists:
+    response = make_question("¿Desea modificar las configuraciones dadas?", choices=['Sí', 'No'])
+
+    if response[0] == 'S':
+        pass
+        #TODO: modify config.json
+    else:
+        main_setup()
+else:
+    main_setup()
