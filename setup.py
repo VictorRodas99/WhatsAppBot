@@ -1,7 +1,6 @@
-# from wspBot import bot
 import json
 import inquirer
-import os, platform
+import os
 
 PATH_OF_EXE = f"{os.getcwd()}\\bot.exe"
 
@@ -52,13 +51,7 @@ def make_question(message:str, choices:list) -> str:
     answers = inquirer.prompt(questions)
     return answers['answer']
 
-def clear_display():
-    current_system = platform.system()
-
-    if current_system == "Windows":
-        os.system("cls")
-    if current_system == "Linux":
-        os.system("clear")
+def clear_display(): os.system("cls")
 
 def get_day_english(day:str) -> str:
     """
@@ -164,6 +157,127 @@ def get_hours() -> list:
     
     return hours
 
+def get_error_message_for_path(message:str, aux_message:str) -> tuple:
+    """
+    This function is for verify_path() and verify_link()
+    """
+
+    status = False
+
+    if not message:
+        message = aux_message
+    else:
+        message = f"{message} y {aux_message.lower()}"
+    
+    return status, message
+
+def verify_path(path:str) -> tuple:
+    if path.lower().strip() == 'x': return True, ''
+    if path.lower().strip() == 'd': return True, ''
+
+    status = True
+    message = ''
+
+    if '\\' in path:
+        status = False
+        message = "No ingrese backslashes ['\\']"
+    
+    if '/' not in path:
+        status, message = get_error_message_for_path(message, "Ingrese las rutas separadas por slashes ['/']")
+    
+    if '//' in path:
+        status, message = get_error_message_for_path(message, "Formato no adecuado para las rutas")
+
+    if path[-4:] != '.txt':
+        status, message = get_error_message_for_path(message, "Debe ingresar el archivo .txt al final de la ruta")
+
+    return status, message
+
+def verify_link(link:str) -> tuple:
+    if link.lower().strip() == 'x': return True, ''
+    if link.lower().strip() == 'd': return True, ''
+
+    status = True
+    message = ''
+
+    if 'https://' not in link[:8]:
+        status = False
+        message = "El link debe empezar por \033[1;33m'https://'\033[1;0m"
+
+    if '\\' in link or '/' not in link or '//' in link[9::]:
+        status = False
+        aux_message = "Formato no adecuado para los link"
+
+        if not message:
+            message = aux_message
+        else:
+            message = f"{aux_message} | {message}"
+
+
+    return status, message
+
+def show_links_or_paths(data:list, mode:str, err:str='',) -> list:
+    print("")
+
+    if err != '':
+        questions = [
+            inquirer.Checkbox(
+                name="check",
+                message=err,
+                choices=data
+            )
+        ]
+    else:
+        questions = [
+            inquirer.Checkbox(
+                name="check",
+                message=f"¿Qué {mode} desea borrar? (Espacio para seleccionar) [Enter para enviar]",
+                choices=data
+            )
+        ]
+
+    answers = inquirer.prompt(questions)
+    answers = answers.values()
+
+    exists_answer = False
+    for _ in answers:
+        for answer in _:
+            exists_answer = True
+            data.remove(answer)
+
+    if not exists_answer:
+        return(show_links_or_paths(data, mode, err="ERROR: No ha seleccionado [Aprete espacio]"))
+    else:
+        return data
+
+def get_link_or_path_from_user(message_delete:str, mode:str) -> list:
+    data = []
+    while True:
+        single_data = cinput("Blue", "> ")
+
+        if mode == "paths":
+            correct, err_message = verify_path(single_data)
+        elif mode == "links":
+            correct, err_message = verify_link(single_data)
+
+        while not correct:
+            cprint("Red", err_message)
+            single_data = cinput("Blue", "> ")
+            correct, err_message = verify_path(single_data)
+        
+        if single_data.lower().strip() == 'x': break
+        elif single_data.lower().strip() == 'd' and len(data) > 0:
+            data = show_links_or_paths(data, mode)
+            cprint("Blue", message_delete)
+            continue
+        
+        if single_data != 'd': #If the user put first of all a 'd'
+            data.append(single_data)
+    
+    return data
+
+
+#Main functions
 def setup_frequency() -> tuple:
     data = {}
     options = ["Diariamente", "Semanalmente", "Cancelar configuración y salir"]
@@ -201,77 +315,7 @@ def setup_frequency() -> tuple:
     data['amount_tasks'] = len(hours) #Amount of tasks
 
     write_json(data)
-    return command
-
-def get_error_message_for_path(message:str, aux_message:str) -> tuple:
-    """
-    This function is for verify_path()
-    """
-
-    status = False
-
-    if not message:
-        message = aux_message
-    else:
-        message = f"{message} y {aux_message.lower()}"
-    
-    return status, message
-
-def verify_path(path:str) -> tuple:
-    if path.lower().strip() == 'x': return True, ''
-    if path.lower().strip() == 'd': return True, ''
-
-    status = True
-    message = ''
-
-    if '\\' in path:
-        status = False
-        message = "No ingrese backslashes ['\\']"
-    
-    if '/' not in path:
-        status, message = get_error_message_for_path(message, "Ingrese las rutas separadas por slashes ['/']")
-    
-    if '//' in path:
-        status, message = get_error_message_for_path(message, "Formato no adecuado para las rutas")
-
-    if path[-4:] != '.txt':
-        status, message = get_error_message_for_path(message, "Debe ingresar el archivo .txt al final de la ruta")
-
-    return status, message
-
-def show_paths(paths:list, err:str='') -> list:
-    print("")
-
-    if err != '':
-        questions = [
-            inquirer.Checkbox(
-                name="check",
-                message=err,
-                choices=paths
-            )
-        ]
-    else:
-        questions = [
-            inquirer.Checkbox(
-                name="check",
-                message="¿Qué rutas desea borrar? (Espacio para seleccionar) [Enter para enviar]",
-                choices=paths
-            )
-        ]
-
-    answers = inquirer.prompt(questions)
-    answers = answers.values()
-
-    exists_answer = False
-    for _ in answers:
-        for answer in _:
-            exists_answer = True
-            paths.remove(answer)
-
-    if not exists_answer:
-        return(show_paths(paths, err="ERROR: No ha seleccionado [Aprete espacio]"))
-    else:
-        return paths
+    return data, command
 
 def setup_paths() -> list:
     clear_display()
@@ -292,76 +336,54 @@ def setup_paths() -> list:
     cprint("Red", "- NO INGRESE LAS RUTAS CON BACKSLASHES '\\' INGRESE LAS RUTAS CON SLASHES \033[1;32m'/'\033[1;0m")
     print("- Si ingresa una ruta que no existe, el mensaje simplemente no será enviado")
 
-    paths = []
-    while True:
-        single_path = cinput("Blue", "> ")
-        status_path, err_message = verify_path(single_path)
-
-        while not status_path:
-            cprint("Red", err_message)
-            single_path = cinput("Blue", "> ")
-            status_path, err_message = verify_path(single_path)
-        
-        if single_path.lower().strip() == 'x': break
-        elif single_path.lower().strip() == 'd' and len(paths) > 0:
-            paths = show_paths(paths)
-            cprint("Blue", "Siga ingresando nuevas rutas o ingrese 'x' para salir")
-            continue
-        
-        if single_path != 'd': #If the user put first of all a 'd'
-            paths.append(single_path)
+    paths = get_link_or_path_from_user("Siga ingresando nuevas rutas o ingrese 'x' para salir", "paths")
     
     if len(paths) == 0:
-        response = make_question("No se ingresó ninguna ruta,¿Desea cancelar la configuración?", choices=['Sí', 'No'])
+        response = make_question("No se ingresó ninguna ruta, ¿Desea cancelar la configuración?", choices=['Sí', 'No'])
 
         if response[0] == 'S': exit()
 
         elif response[0] == 'N':
-            confirm = make_question("\n¿Ingresó alguna ruta equivocada que quiera borrar?", choices=['Sí', 'No'])
+            print("")
+            confirm = make_question("¿Ingresó alguna ruta equivocada que quiera borrar?", choices=['Sí', 'No'])
 
-            if confirm[0] == 'S': paths = show_paths(paths)
+            if confirm[0] == 'S': paths = show_links_or_paths(paths, "rutas")
             else: setup_paths()
 
         else:
-            setup_paths()
+            return(setup_paths())
     
     write_json({"messages": paths})
     return paths
         
-def setup_links() -> None:
+def setup_links() -> list:
     clear_display()
-    print("Ingrese los links de los grupos a los cuales mandar los mensajes")
-    print("Ingrese los links completos [https://chat.whatsapp.com/AbCdF123]")
+    cprint("Blue", "Ingrese los links de los grupos a los cuales mandar los mensajes")
+    print("Ingrese los links completos \033[1;33m[https://chat.whatsapp.com/AbCdF123]\033[1;0m")
     print("- No ingrese los links entre comillas")
     print("- Escriba 'x' para terminar el listado")
     print("- Escriba 'd' para eliminar algún link mal ingresado")
 
+    links = get_link_or_path_from_user("Siga ingresando nuevos links o ingrese 'x' para salir", "links")
+
+    if len(links) == 0:
+        response = make_question("No se ingresó ningún link, ¿Desea cancelar la configuración?", choices=['Sí', 'No'])
+
+        if response[0] == 'S': exit()
+
+        elif response[0] == 'N':
+            print("")
+            confirm = make_question("¿Ingresó algún link equivocado que quiera borrar?", choices=['Sí', 'No'])
+
+            if confirm[0] == 'S': links = show_links_or_paths(links, "links")
+            else: setup_links()
+
+        else:
+            return(setup_links())
+    
+    write_json({"links": links})
+    return links
+
+#setup_links()
 #setup_frequency()
 #setup_paths()
-
-
-
-# def get_data_from_config() -> tuple:
-#     with open('config.json', 'r') as f:
-#         data = json.load(f)
-    
-#     return data['groupLinks'], data['messages'], data['imgs']
-
-# def check_JSON() -> bool:
-#     try:
-#         f = open('config.json', 'r')
-#         f.close()
-#         return True
-#     except FileNotFoundError:
-#         return False
-
-# def main_setup() -> None:
-
-#     if check_JSON():
-#         # group_links, messages, imgs = get_data_from_config()
-
-#         # for link in group_links:
-#         #     bot(link, messages, imgs)
-
-# else:
-#     setup()
