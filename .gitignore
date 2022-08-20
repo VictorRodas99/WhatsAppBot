@@ -10,6 +10,7 @@ testing/
 #Other files
 config.json
 activate.ps1
+setTasks.ps1
 
 # C extensions
 *.so
