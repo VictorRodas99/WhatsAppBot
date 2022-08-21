@@ -3,6 +3,8 @@ import os, subprocess
 import inquirer
 import json
 
+task_frequency = False #False (Daily) | True (Weekly)
+
 PATH_OF_EXE = f"{os.getcwd()}\\bot.exe"
 
 COLORS = {
@@ -13,6 +15,44 @@ COLORS = {
 
 
 #Powershell
+def get_task_names() -> list:
+    #NO optimizado!
+
+    if task_frequency:
+        task_name = "wspbotWeek_"
+    else:
+        task_name = "wspbotDaily_"
+
+    p = subprocess.Popen(["powershell.exe", f'Get-ScheduledTask | Select-String "{task_name}"'], stdout=subprocess.PIPE)
+    output = p.stdout.read().decode()
+
+    output = output.split("\n")
+
+    output_list = []
+    for out in output:
+        if 'TaskName' in out:
+            start = out.find('TaskName')
+            end = out.find(',')
+            output_list.append(out[start:end])
+
+
+    output_list = list(dict.fromkeys(output_list))
+
+    tasks_names = []
+    for char in output_list:
+        start = char.index('"')
+        end   = char.rindex('"')
+        tasks_names.append(char[start:end].replace('"', ''))
+    
+    return tasks_names
+
+def unregister_task(task_name:str) -> None:
+    command = f'Unregister-ScheduledTask -TaskName "{task_name}" -Confirm:$false'
+    process = subprocess.Popen(["powershell.exe", command], stderr=subprocess.PIPE)
+    err = process.stderr.read()
+
+    if err: raise Exception(f"ERROR: No se pudo borrar la tarea `{task_name}`")
+
 def exec_powershell() -> bool:
     """
     Executes the task register,
@@ -43,6 +83,7 @@ def write_script(commands:list) -> bool:
         if not success_status: break
     
     return success_status
+
 
 
 #Input-output (General)
@@ -83,6 +124,7 @@ def clear_display(msg=True) -> None:
     if msg: cprint("Blue", "Ingrese las configuraciones iniciales para utilizar el programa\n")
 
 
+
 #Config file
 def check_config() -> bool:
     exists = True
@@ -102,29 +144,65 @@ def write_json(data:dict) -> None:
     with open('config.json', 'w') as f:
         f.write(JSON_object)
 
+def delete_or_change(data, key:str, option:str) -> list:
+    """
+    This function is for ```change_data()```
+    """
+
+    if key == "group_links":
+        if option == 'B': new_data = show_links_or_paths(data, mode="links")
+        else: new_data = get_link_or_path_from_user("Siga ingresando nuevos links o ingrese 'x' para salir", "links")
+
+    elif key == "messages":
+        if option == 'B': new_data = show_links_or_paths(data, mode="paths")
+        else: new_data = get_link_or_path_from_user("Siga ingresando nuevas rutas o ingrese 'x' para salir", "paths")
+
+    elif key == "times":
+        if option == 'B': new_data = show_links_or_paths(data, mode="horas")
+        else: new_data = get_hours()   
+
+    return new_data 
+
+def change_data(data, key:str) -> list | dict:
+    if type(data) == list:
+        cprint("Yellow", "Puede borrar un dato o puede cambiarlo por otro")
+        response = make_question("¿Qué acción desea realizar?", choices=["Borrar", "Nuevo dato"])
+
+        new_data = delete_or_change(data, key, option=response[0])
+ 
+    elif type(data) == dict:
+        cprint("Red", "No implementado")
+        exit(1)
+    else:
+        cprint("Red", "Only <dict> and <list> types are implemented")
+        exit(1)
+    
+    return new_data
+
 def modify_json() -> None:
     with open("config.json", 'r') as config:
         data:dict = json.load(config)
 
-    key = make_question("¿Qué datos desea modificar?", choices=list(data.keys()))
-    entry = data[key]
+    choices = list(data.keys())
+    del choices[2] #remove amount_task from list
 
-    if type(entry) == list:
-        if key == "group_links":
-            new_data = show_links_or_paths(entry, mode='links')
-        elif key == "messages":
-            new_data = show_links_or_paths(entry, mode='paths')
-        elif key == "times":
-            new_data = show_links_or_paths(entry, mode="horas")
-    
-        data[key] = new_data
-        write_json(data)
+    key = make_question("¿Qué datos desea modificar?", choices)
+    entry = change_data(data[key], key)
+    data[key] = entry
 
-    elif type(entry) == dict:
-        pass #TODO: modify times for weekly mode
+    write_json(data)
 
-    else:
-        cprint("Red", "No implementado aún")
+    if key == "times": #if times has changed then we change the schedule of tasks
+        commands = get_command(data["frequency"], entry)
+        old_task_names = get_task_names()
+
+        if len(old_task_names) > 0: #if an unregister has been done externally
+            for name in old_task_names: unregister_task(name)
+            cprint("Green", "Tareas viejas removidas")
+
+        success = write_script(commands)
+        if not success: cprint("Red", "\nAn error has ocurred in the task register\n")
+
 
 
 #Checkers
@@ -218,6 +296,7 @@ def verify_link(link:str) -> tuple:
     return status, message
 
 
+
 #Get formatted data
 def get_day_english(day:str) -> str:
     """
@@ -235,12 +314,15 @@ def get_day_english(day:str) -> str:
             return values
 
 def get_command(frequency:str, times:list) -> str:
+    global task_frequency
     commands = []
     task = []
     counter = 0
 
 
     if frequency == 'Daily':
+        task_frequency = False
+
         while counter < len(times[0]):
             hour = times[0][counter]
 
@@ -257,6 +339,8 @@ def get_command(frequency:str, times:list) -> str:
             counter+=1
 
     elif frequency == 'Weekly':
+        task_frequency = True
+
         while counter < len(times[1]):
             hour = times[1][counter]
 
@@ -292,6 +376,7 @@ def get_hours() -> list:
         status = verify_hours(hours)
     
     return hours
+
 
 
 #Get data from user
@@ -334,17 +419,18 @@ def get_link_or_path_from_user(message_delete:str, mode:str) -> list:
     while True:
         single_data = cinput("Blue", "> ")
 
-        if mode == "paths":
-            correct, err_message = verify_path(single_data)
-        elif mode == "links":
-            correct, err_message = verify_link(single_data)
+        if mode == "paths": correct, err_message = verify_path(single_data)
+        elif mode == "links": correct, err_message = verify_link(single_data)
 
         while not correct:
             cprint("Red", err_message)
             single_data = cinput("Blue", "> ")
-            correct, err_message = verify_path(single_data)
+
+            if mode == "paths": correct, err_message = verify_path(single_data)
+            elif mode == "links": correct, err_message = verify_link(single_data)
         
         if single_data.lower().strip() == 'x': break
+        
         elif single_data.lower().strip() == 'd' and len(data) > 0:
             data = show_links_or_paths(data, mode)
             cprint("Blue", message_delete)
@@ -354,6 +440,7 @@ def get_link_or_path_from_user(message_delete:str, mode:str) -> list:
             data.append(single_data)
     
     return data
+
 
 
 #Main functions
@@ -394,7 +481,6 @@ def setup_frequency() -> tuple:
 
     cprint("Blue", "\nTiempo configurado!\n")
     sleep(1)
-    #write_json(data)
     return data, command
 
 def setup_paths() -> list:
@@ -435,7 +521,6 @@ def setup_paths() -> list:
     
     cprint("Blue", "\nRutas configuradas!\n")
     sleep(1)
-    #write_json({"messages": paths})
     return paths
         
 def setup_links() -> list:
@@ -465,7 +550,6 @@ def setup_links() -> list:
     
     cprint("Blue", "\nLinks configurados!\n")
     sleep(1)
-    #write_json({"links": links})
     return links
 
 def main_setup() -> None:
@@ -485,7 +569,6 @@ def main_setup() -> None:
     if not success_status: cprint("Red", "\nAn error has ocurred in the task register\n")
 
 #TODO: check for nonexistent paths
-#Unregister-ScheduledTask -TaskName "TestTask" -Confirm:$false
 
 config_exists = check_config()
 
@@ -497,6 +580,11 @@ if config_exists:
     if response[0] == 'S':
         modify_json() #TODO: change the task schedule if times have been changed
     else:
+        task_names = get_task_names()
+
+        if len(task_names) > 0:
+            for name in task_names: unregister_task(name)
+
         main_setup()
 else:
     main_setup()
