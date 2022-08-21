@@ -11,6 +11,7 @@ testing/
 config.json
 activate.ps1
 setTasks.ps1
+reportes.txt
 
 # C extensions
 *.so
