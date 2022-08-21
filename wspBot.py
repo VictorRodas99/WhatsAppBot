@@ -1,10 +1,18 @@
-from alright import WhatsApp
 from bs4 import BeautifulSoup
-from time import sleep
 from datetime import datetime
-import requests
+from alright import WhatsApp
+import requests, json, os
+from time import sleep
 
-MESSENGER = WhatsApp()
+def check_config() -> bool:
+    exists = True
+    files = os.listdir()
+
+    if 'config.json' not in files:
+        exists = False
+
+    return exists
+
 
 def write_in_log(names:list) -> None:
     with open('log.txt', 'w') as f:
@@ -14,6 +22,7 @@ def write_in_log(names:list) -> None:
         f.write("Estos son los grupos cuyos links aún funcionan\n")
 
         for name in names: f.write(f'- {name}\n')
+
 
 def get_working_links(links:str) -> tuple:
     links = list(dict.fromkeys(links)) #remove duplicates
@@ -33,6 +42,7 @@ def get_working_links(links:str) -> tuple:
 
     return links, names
 
+
 def get_group_name(link) -> str:
     response = requests.get(link)
     soup = BeautifulSoup(response.content, "html.parser")
@@ -43,8 +53,9 @@ def get_group_name(link) -> str:
 
     return group
 
+
 def get_text(path) -> str:
-    with open('./msg.txt', 'r', encoding="utf8") as f:
+    with open(path, 'r', encoding="utf8") as f:
         has_image = False
         text = f.read().split('\n')
         path = text[0]
@@ -58,7 +69,14 @@ def get_text(path) -> str:
             text = '\n'.join(text)
     
     return text, has_image, path
-        
+
+
+def get_data_from_json() -> dict:
+    with open("config.json", 'r') as config:
+        data = json.load(config)
+    
+    return data
+
 
 def bot(group_links:list, message_paths:list) -> None:
     group_links, names = get_working_links(group_links)
@@ -80,4 +98,21 @@ def bot(group_links:list, message_paths:list) -> None:
         x+=1
 
 
-#bot("https://chat.whatsapp.com/LrIxKHzMBJsLvwzSWUfLQu", './msg.txt', './image.jpg')
+def main() -> None:
+    data = get_data_from_json()
+    
+    group_links = data["group_links"]
+    message_paths = data["messages"]
+
+    bot(group_links, message_paths)
+
+
+if __name__ == '__main__':
+    if check_config():
+        MESSENGER = WhatsApp()
+    else:
+        print("Ejecute setup.exe para iniciar las configuraciones")
+        sleep(1)
+        exit(1)
+
+    main()
