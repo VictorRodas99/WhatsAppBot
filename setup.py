@@ -14,6 +14,51 @@ COLORS = {
 }
 
 
+#This resolve the problem with subprocess and pyinstaller
+def subprocess_args(include_stdout=True):
+    # The following is true only on Windows.
+    if hasattr(subprocess, 'STARTUPINFO'):
+        si = subprocess.STARTUPINFO()
+        si.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        env = os.environ
+    else:
+        si = None
+        env = None
+
+    if include_stdout:
+        ret = {'stdout': subprocess.PIPE}
+    else:
+        ret = {}
+
+    ret.update({'stdin': subprocess.PIPE,
+                'stderr': subprocess.PIPE,
+                'startupinfo': si,
+                'env': env })
+            
+    return ret
+
+def execute_process(args:list, output_name:str) -> str:
+    output_name = f"{output_name}.txt"
+
+    with open(output_name, 'wb') as f:
+        try:
+            try:
+                txt = subprocess.check_output(args, **subprocess_args(False))
+                f.write(txt)
+
+            except subprocess.CalledProcessError as e:
+                f.write(b'1\n')
+                f.write(e.stderr)
+
+        except OSError as e:
+            f.write('Failed: {}'.format(str(e)))
+    
+    with open(output_name, 'r') as f: output = f.read()
+    
+    return output
+
+
+
 #Powershell
 def get_task_names() -> list:
     #NO optimizado!
@@ -23,9 +68,7 @@ def get_task_names() -> list:
     else:
         task_name = "wspbotDaily_"
 
-    p = subprocess.Popen(["powershell.exe", f'Get-ScheduledTask | Select-String "{task_name}"'], stdout=subprocess.PIPE)
-    output = p.stdout.read().decode()
-
+    output = execute_process(["powershell", f'Get-ScheduledTask | Select-String "{task_name}"'], "task_names")
     output = output.split("\n")
 
     output_list = []
@@ -44,14 +87,18 @@ def get_task_names() -> list:
         end   = char.rindex('"')
         tasks_names.append(char[start:end].replace('"', ''))
     
+    os.system("del task_names.txt")
     return tasks_names
 
 def unregister_task(task_name:str) -> None:
     command = f'Unregister-ScheduledTask -TaskName "{task_name}" -Confirm:$false'
-    process = subprocess.Popen(["powershell.exe", command], stderr=subprocess.PIPE)
-    err = process.stderr.read()
+    output = execute_process(["powershell", command], "unregister")
 
-    if err: raise Exception(f"ERROR: No se pudo borrar la tarea `{task_name}`")
+    #if throws an error
+    if output.split('\n')[0] == '1':
+        raise Exception(f"ERROR: No se pudo borrar la tarea `{task_name}`")
+    
+    os.system("del unregister.txt")
 
 def exec_powershell() -> bool:
     """
@@ -61,11 +108,15 @@ def exec_powershell() -> bool:
 
     status = True
 
-    arg = "Set-ExecutionPolicy RemoteSigned -Scope Process -Force; if ($?) { .\\setTasks.ps1 }"
-    process = subprocess.Popen(["powershell.exe", arg], stderr=subprocess.PIPE)
-    stderror = process.stderr.read()
+    arg = "Set-ExecutionPolicy RemoteSigned -Scope Process -Force; if ($?) { ./setTasks.ps1 }"
+    output = execute_process(["powershell", arg], "register")
+    stderror = output.split('\n')[0]
 
-    if stderror: status = False
+    if stderror == '1': status = False
+    else:
+        print(output)
+        os.system("del register.txt")
+        os.system("del setTasks.ps1")
 
     return status
 
@@ -165,6 +216,11 @@ def delete_or_change(data, key:str, option:str) -> list:
 
 def change_data(data, key:str) -> list | dict:
     if type(data) == list:
+        if len(data) < 2:
+            cprint("Red", "Solo hay un dato, no puede borrarlo, solo modificarlo!")
+            cprint("Red", f"El dato: {data[0]}")
+            exit(1)
+
         cprint("Yellow", "Puede borrar un dato o puede cambiarlo por otro")
         response = make_question("¿Qué acción desea realizar?", choices=["Borrar", "Nuevo dato"])
 
@@ -190,10 +246,8 @@ def modify_json() -> None:
     entry = change_data(data[key], key)
     data[key] = entry
 
-    write_json(data)
-
     if key == "times": #if times has changed then we change the schedule of tasks
-        commands = get_command(data["frequency"], entry)
+        commands = get_command(data["frequency"], [entry])
         old_task_names = get_task_names()
 
         if len(old_task_names) > 0: #if an unregister has been done externally
@@ -202,6 +256,8 @@ def modify_json() -> None:
 
         success = write_script(commands)
         if not success: cprint("Red", "\nAn error has ocurred in the task register\n")
+    
+    write_json(data)
 
 
 
