@@ -4,14 +4,34 @@ from alright import WhatsApp
 import requests, json, os
 from time import sleep
 
-def check_config() -> bool:
+def check_config() -> tuple:
     exists = True
-    files = os.listdir()
+    current_path = os.getcwd()
 
-    if 'config.json' not in files:
-        exists = False
+    #When powershell executes automatically the exe, the origin change to system32
+    if current_path.split('\\')[-1].lower() == 'system32':
+        try:
+            with open('../../origin.txt', 'r') as f:
+                path = f.read()
+            
+            current_path = path
+            path = '/'.join(path.split('\\'))
+            files = os.listdir(path)
 
-    return exists
+            if 'config.json' not in files: exists = False
+            else: exists = True
+
+        except FileNotFoundError:
+            print("No existe el archivo origin.txt")
+            sleep(2)
+            exists = False
+        
+    else:
+        files = os.listdir()
+        if 'config.json' not in files: exists = False
+
+    
+    return current_path, exists
 
 
 def write_in_log(names:list) -> None:
@@ -71,8 +91,8 @@ def get_text(path) -> str:
     return text, has_image, path
 
 
-def get_data_from_json() -> dict:
-    with open("config.json", 'r') as config:
+def get_data_from_json(config_path:str) -> dict:
+    with open(config_path, 'r') as config:
         data = json.load(config)
     
     return data
@@ -98,8 +118,8 @@ def bot(group_links:list, message_paths:list) -> None:
         x+=1
 
 
-def main() -> None:
-    data = get_data_from_json()
+def main(config_path:str) -> None:
+    data = get_data_from_json(config_path)
     
     group_links = data["group_links"]
     message_paths = data["messages"]
@@ -108,11 +128,11 @@ def main() -> None:
 
 
 if __name__ == '__main__':
-    if check_config():
-        MESSENGER = WhatsApp()
-    else:
-        print("Ejecute setup.exe para iniciar las configuraciones")
-        sleep(1)
-        exit(1)
+    current_path, config_exists = check_config()
 
-    main()
+    if config_exists:
+        MESSENGER = WhatsApp()
+        main(f"{current_path}\\config.json")
+    else:
+        print("Ejecute `setup` para iniciar las configuraciones")
+        sleep(1)
