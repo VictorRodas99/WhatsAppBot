@@ -565,15 +565,15 @@ def setup_paths() -> list:
 
         if response[0] == 'S': exit()
 
-        elif response[0] == 'N':
+        else:
             print("")
             confirm = make_question("¿Ingresó alguna ruta equivocada que quiera borrar?", choices=['Sí', 'No'])
 
-            if confirm[0] == 'S': paths = show_links_or_paths(paths, "rutas")
-            else: setup_paths()
-
-        else:
-            return(setup_paths())
+            if confirm[0] == 'S':
+                paths = show_links_or_paths(paths, "rutas")
+            else: 
+                return(setup_paths())
+        
     
     cprint("Blue", "\nRutas configuradas!\n")
     sleep(1)
@@ -592,17 +592,16 @@ def setup_links() -> list:
     if len(links) == 0:
         response = make_question("No se ingresó ningún link, ¿Desea cancelar la configuración?", choices=['Sí', 'No'])
 
-        if response[0] == 'S': exit()
-
-        elif response[0] == 'N':
+        if response[0] == 'S':
+            exit()
+        else:
             print("")
             confirm = make_question("¿Ingresó algún link equivocado que quiera borrar?", choices=['Sí', 'No'])
 
-            if confirm[0] == 'S': links = show_links_or_paths(links, "links")
-            else: setup_links()
-
-        else:
-            return(setup_links())
+            if confirm[0] == 'S':
+                links = show_links_or_paths(links, "links")
+            else:
+                return(setup_links())
     
     cprint("Blue", "\nLinks configurados!\n")
     sleep(1)
